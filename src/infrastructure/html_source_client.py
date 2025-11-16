@@ -1,0 +1,220 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any, Dict, List
+
+import httpx
+from bs4 import BeautifulSoup
+import yaml
+
+
+@dataclass
+class HtmlCatalogItem:
+    """
+    Generic representation of a scraped catalog entry from an HTML page.
+
+    For now this is shaped around the tiereditems.com gun cards, but it
+    is generic enough to reuse for other games that expose similar stats.
+    """
+
+    name: str
+    flavor_text: str | None
+    type: str | None
+    dps: float | None
+    damage: float | None
+    fire_rate: float | None
+    reload_time: float | None
+    magazine_size: int | None
+    ammo_capacity: int | None
+    shot_speed: float | None
+    range: float | None
+    force: float | None
+    spread: float | None
+    notes: str | None
+
+
+@dataclass
+class HtmlSourceConfig:
+    """
+    Configuration for scraping a specific game/entity from an HTML source,
+    loaded from `config/games.yaml`.
+    """
+
+    base_url: str
+    path: str
+    item_selector: str
+    image_class: str
+    name_class: str
+    flavor_class: str
+    notes_prefix: str
+    exclude_type_contains: List[str]
+
+
+@dataclass
+class HtmlSourceClient:
+    """
+    Generic HTML source client that knows how to:
+
+      - Load scraping selectors from `config/games.yaml`
+      - Fetch the page for a given game/entity
+      - Parse catalog items using those selectors
+
+    Currently used against tiereditems.com for Gungeon guns, but
+    configured entirely via YAML.
+    """
+
+    timeout: float = 10.0
+    game_id: str = "gungeon"
+    entity: str = "guns"
+    provider: str = "tiereditems"
+
+    def _load_source_config(self) -> HtmlSourceConfig:
+        """
+        Load the HTML structure and selectors for this game/entity from YAML.
+        """
+        config_path = Path(__file__).resolve().parents[2] / "config" / "games.yaml"
+        with config_path.open("r", encoding="utf-8") as f:
+            raw = yaml.safe_load(f) or {}
+
+        games_cfg = raw.get("games") or {}
+        game_cfg = games_cfg.get(self.game_id) or {}
+        providers_cfg = game_cfg.get("external_sources") or {}
+        provider_cfg = providers_cfg.get(self.provider) or {}
+
+        base_url = provider_cfg.get("base_url", "")
+        entity_cfg = provider_cfg.get(self.entity) or {}
+
+        return HtmlSourceConfig(
+            base_url=str(base_url),
+            path=str(entity_cfg.get("path", "")),
+            item_selector=str(entity_cfg.get("item_selector", "a")),
+            image_class=str(entity_cfg.get("image_class", "")),
+            name_class=str(entity_cfg.get("name_class", "")),
+            flavor_class=str(entity_cfg.get("flavor_class", "")),
+            notes_prefix=str(entity_cfg.get("notes_prefix", "Notes:")),
+            exclude_type_contains=list(entity_cfg.get("exclude_type_contains", [])),
+        )
+
+    def fetch_raw_html(self) -> str:
+        cfg = self._load_source_config()
+        url = cfg.base_url.rstrip("/") + cfg.path
+        resp = httpx.get(url, timeout=self.timeout)
+        resp.raise_for_status()
+        return resp.text
+
+    def fetch_items(self) -> List[HtmlCatalogItem]:
+        """
+        Fetch and parse all catalog entries from the configured HTML source.
+        """
+        cfg = self._load_source_config()
+        html = self.fetch_raw_html()
+        soup = BeautifulSoup(html, "html.parser")
+
+        items: List[HtmlCatalogItem] = []
+
+        # Each item appears as an element matching the configured selector
+        # that contains an <img> with the configured image class.
+        for a in soup.select(cfg.item_selector):
+            img = a.find("img", class_=cfg.image_class)
+            if not img:
+                continue
+
+            span = a.find("span")
+            if not span:
+                continue
+
+            item = self._parse_card(span, cfg)
+            if item is not None:
+                items.append(item)
+
+        return items
+
+    @staticmethod
+    def _parse_card(span: Any, cfg: HtmlSourceConfig) -> HtmlCatalogItem | None:
+        """
+        Parse a <span> block that contains the <p> lines for a catalog card.
+        """
+        ps = span.find_all("p")
+        if not ps:
+            return None
+
+        name: str | None = None
+        flavor_text: str | None = None
+        notes: str | None = None
+        stats_raw: Dict[str, str] = {}
+
+        for p in ps:
+            text = p.get_text(strip=True)
+            if not text:
+                continue
+
+            # Name
+            if cfg.name_class and cfg.name_class in (p.get("class") or []):
+                name = text
+                continue
+
+            # Flavor / pickup line
+            if cfg.flavor_class and cfg.flavor_class in (p.get("class") or []):
+                if text:
+                    flavor_text = text
+                continue
+
+            # Notes
+            if text.startswith(cfg.notes_prefix):
+                notes = text[len(cfg.notes_prefix) :].strip()
+                continue
+
+            # Generic "Key :Value" lines.
+            if ":" in text:
+                key, value = text.split(":", 1)
+                stats_raw[key.strip()] = value.strip()
+
+        if not name:
+            return None
+
+        # Only keep things that look like guns (Type not Passive/Active), per config.
+        type_val = stats_raw.get("Type")
+        if type_val:
+            type_lower = type_val.lower()
+            for token in cfg.exclude_type_contains:
+                if token.lower() in type_lower:
+                    return None
+
+        def _to_float(key: str) -> float | None:
+            v = stats_raw.get(key)
+            if not v:
+                return None
+            # Strip non-numeric suffixes like '%' or 'm'.
+            try:
+                return float(v.replace("%", "").replace("m", ""))
+            except ValueError:
+                return None
+
+        def _to_int(key: str) -> int | None:
+            v = stats_raw.get(key)
+            if not v:
+                return None
+            try:
+                return int(v)
+            except ValueError:
+                return None
+
+        return HtmlCatalogItem(
+            name=name,
+            flavor_text=flavor_text,
+            type=stats_raw.get("Type"),
+            dps=_to_float("DPS"),
+            damage=_to_float("Damage"),
+            fire_rate=_to_float("Fire Rate"),
+            reload_time=_to_float("Reload Time"),
+            magazine_size=_to_int("Magazine Size"),
+            ammo_capacity=_to_int("Ammo Capacity"),
+            shot_speed=_to_float("Shot Speed"),
+            range=_to_float("Range"),
+            force=_to_float("Force"),
+            spread=_to_float("Spread"),
+            notes=notes,
+        )
+
+

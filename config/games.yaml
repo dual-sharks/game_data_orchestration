@@ -2,34 +2,67 @@ games:
   gungeon:
     id: "gungeon"
     name: "Enter the Gungeon"
-    sources:
-      items:
-        fetch:
-          type: "http"
-          url: "https://enterthegungeon.fandom.com/wiki/Module:Items/Data?action=raw"
-        format: "lua_table"
+    sources: {}
 
-      guns:
-        fetch:
-          type: "http"
-          url: "https://enterthegungeon.fandom.com/wiki/Module:Guns/Data?action=raw"
-        format: "lua_table"
+    external_sources:
+      tiereditems:
+        base_url: "https://tiereditems.com"
+        guns:
+          # Relative path for the Gungeon cheat sheet
+          path: "/etg"
+
+          # HTML structure selectors
+          item_selector: "a"           # each card is an <a> containing the image + span
+          image_class: "etg-item"      # <img class="etg-item" ...>
+          name_class: "item-title"     # <p class="item-title">Name</p>
+          flavor_class: "pickup"       # <p class="pickup">Flavor text</p>
+          notes_prefix: "Notes:"       # <p>Notes: ...</p>
+
+          # Filter out non-gun entries by Type field
+          exclude_type_contains:
+            - "Passive"
+            - "Active"
+
+          # How to map a scraped HTML catalog item into our canonical record
+          # for external Gungeon guns.
+          record:
+            game_id:
+              value: "gungeon"
+            game_name:
+              value: "Enter the Gungeon"
+            gun_name:
+              field: "name"
+            flavor_text:
+              field: "flavor_text"
+            type:
+              field: "type"
+            dps:
+              field: "dps"
+            damage:
+              field: "damage"
+            fire_rate:
+              field: "fire_rate"
+            reload_time:
+              field: "reload_time"
+            magazine_size:
+              field: "magazine_size"
+            ammo_capacity:
+              field: "ammo_capacity"
+            shot_speed:
+              field: "shot_speed"
+            range:
+              field: "range"
+            force:
+              field: "force"
+            spread:
+              field: "spread"
+            notes:
+              field: "notes"
+            source:
+              value: "tiereditems"
 
   riskofrain2:
     id: "riskofrain2"
     name: "Risk of Rain 2"
+    sources: {}
 
-    sources:
-      items:
-        fetch:
-          type: "http"
-          url: "https://riskofrain2.fandom.com/wiki/Module:Items/Data?action=raw"
-        format: "lua_table"
-
-      equipment:
-        fetch:
-          type: "http"
-          url: "https://riskofrain2.fandom.com/wiki/Module:Equipment/Data?action=raw"
-        format: "lua_table"
-
-# Game ingestion config
