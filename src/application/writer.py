@@ -17,11 +17,11 @@ from infrastructure.html_source_client import HtmlCatalogItem, HtmlSourceClient
 
 
 @dataclass
-class GungeonExternalIngestionService:
+class ExternalIngestionService:
     """
     Application service that uses a generic HTML catalog client to
-    retrieve external Gungeon data (guns, items, etc.) as a DataFrame,
-    then writes them to Parquet using YAML-driven record mappings.
+    retrieve external game data (guns, items, etc.) as a DataFrame,
+    using YAML-driven record mappings.
     """
 
     client: HtmlSourceClient  # game_id/entity/provider select config in YAML
@@ -96,42 +96,106 @@ class GungeonExternalIngestionService:
         return record
 
 
+def get_game_name(game_id: str) -> str:
+    """
+    Helper to resolve the human-readable game name from config by id.
+    """
+    config_path = project_root / "config" / "games.yaml"
+    with config_path.open("r", encoding="utf-8") as f:
+        raw = yaml.safe_load(f) or {}
+
+    games_cfg = raw.get("games") or {}
+    game_cfg = games_cfg.get(game_id) or {}
+    return str(game_cfg.get("name", game_id))
+
+
 def main() -> None:
     """
-    CLI helper to fetch external Gungeon gun AND item stats (currently from
-    tiereditems.com via HTML scraping), write them to dedicated Parquet files,
-    and print small previews.
+    CLI helper to run all configured ingestion jobs:
+      - html_entity_to_parquet: scrape cards and write Parquet using record mappings
+      - synergies_from_html_cards: derive synergies from cards and write Parquet
 
         poetry run python src/application/writer.py
     """
-    output_dir = Path(__file__).resolve().parents[2] / "data" / "raw"
-    output_dir.mkdir(parents=True, exist_ok=True)
+    output_root = Path(__file__).resolve().parents[2] / "data" / "raw"
+    output_root.mkdir(parents=True, exist_ok=True)
 
-    # Guns
-    guns_client = HtmlSourceClient(game_id="gungeon", entity="guns", provider="tiereditems")
-    guns_service = GungeonExternalIngestionService(client=guns_client)
-    df_guns = guns_service.fetch_df()
-    print(f"Fetched {len(df_guns)} external Gungeon guns.")
-    guns_path = output_dir / "gungeon_guns_external.parquet"
-    if not df_guns.empty:
-        df_guns.to_parquet(guns_path)
-        print(f"Wrote guns Parquet to {guns_path}")
-        print(df_guns.head())
-    else:
-        print("No guns fetched; nothing written for guns.")
+    # Load job definitions from config/pipelines.yaml
+    pipelines_path = project_root / "config" / "pipelines.yaml"
+    with pipelines_path.open("r", encoding="utf-8") as f:
+        pipelines_raw = yaml.safe_load(f) or {}
 
-    # Items
-    items_client = HtmlSourceClient(game_id="gungeon", entity="items", provider="tiereditems")
-    items_service = GungeonExternalIngestionService(client=items_client)
-    df_items = items_service.fetch_df()
-    print(f"Fetched {len(df_items)} external Gungeon items.")
-    items_path = output_dir / "gungeon_items_external.parquet"
-    if not df_items.empty:
-        df_items.to_parquet(items_path)
-        print(f"Wrote items Parquet to {items_path}")
-        print(df_items.head())
-    else:
-        print("No items fetched; nothing written for items.")
+    jobs = pipelines_raw.get("jobs") or []
+
+    for job in jobs:
+        kind = job.get("kind")
+        game_id = job.get("game_id")
+        provider = job.get("provider")
+        entity = job.get("entity")
+        parquet_rel = job.get("parquet")
+
+        if not (kind and game_id and provider and entity and parquet_rel):
+            print(f"Skipping invalid job definition: {job}")
+            continue
+
+        parquet_path = output_root.parent / parquet_rel if not parquet_rel.startswith("data/") else Path(parquet_rel)
+        if not parquet_path.is_absolute():
+            parquet_path = Path(__file__).resolve().parents[2] / parquet_rel
+
+        print(f"Running job {job.get('id', '')!r}: kind={kind}, game_id={game_id}, entity={entity}")
+
+        client = HtmlSourceClient(game_id=game_id, entity=entity, provider=provider)
+
+        if kind == "html_entity_to_parquet":
+            service = ExternalIngestionService(client=client)
+            df = service.fetch_df()
+            print(f"Fetched {len(df)} records for html_entity_to_parquet.")
+            if not df.empty:
+                parquet_path.parent.mkdir(parents=True, exist_ok=True)
+                df.to_parquet(parquet_path)
+                print(f"Wrote entity Parquet to {parquet_path}")
+                print(df.head())
+            else:
+                print("No records fetched; nothing written.")
+
+        elif kind == "synergies_from_html_cards":
+            # Derive synergies from the raw HTML cards.
+            cards = client.fetch_items()
+            game_name = get_game_name(game_id)
+            source = provider
+            base_column = job.get("base_column", "base_name")
+
+            synergy_records: list[dict] = []
+            for card in cards:
+                base_name = card.name
+                for syn in card.synergies:
+                    title = syn.get("title")
+                    desc = syn.get("description")
+                    for related in syn.get("items", []):
+                        synergy_records.append(
+                            {
+                                "game_id": game_id,
+                                "game_name": game_name,
+                                base_column: base_name,
+                                "synergy_title": title,
+                                "synergy_description": desc,
+                                "related_item_name": related,
+                                "source": source,
+                            }
+                        )
+
+            df_syn = pd.DataFrame.from_records(synergy_records)
+            print(f"Derived {len(df_syn)} synergies for job {job.get('id', '')!r}.")
+            if not df_syn.empty:
+                parquet_path.parent.mkdir(parents=True, exist_ok=True)
+                df_syn.to_parquet(parquet_path)
+                print(f"Wrote synergies Parquet to {parquet_path}")
+                print(df_syn.head())
+            else:
+                print("No synergies derived; nothing written.")
+
+        else:
+            print(f"Unknown job kind {kind!r}; skipping.")
 
 
 if __name__ == "__main__":

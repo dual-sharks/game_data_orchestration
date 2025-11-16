@@ -1,0 +1,36 @@
+jobs:
+  # HTML -> Parquet for external Gungeon guns (Tiered Items)
+  - id: gungeon_guns_external
+    kind: html_entity_to_parquet
+    game_id: gungeon
+    provider: tiereditems
+    entity: guns
+    parquet: "data/raw/gungeon_guns_external.parquet"
+
+  # Synergies derived from Gungeon gun cards
+  - id: gungeon_gun_synergies_external
+    kind: synergies_from_html_cards
+    game_id: gungeon
+    provider: tiereditems
+    entity: guns
+    parquet: "data/raw/gungeon_gun_synergies_external.parquet"
+    base_column: base_gun_name
+
+  # HTML -> Parquet for external Gungeon items (Tiered Items)
+  - id: gungeon_items_external
+    kind: html_entity_to_parquet
+    game_id: gungeon
+    provider: tiereditems
+    entity: items
+    parquet: "data/raw/gungeon_items_external.parquet"
+
+  # Synergies derived from Gungeon item cards
+  - id: gungeon_item_synergies_external
+    kind: synergies_from_html_cards
+    game_id: gungeon
+    provider: tiereditems
+    entity: items
+    parquet: "data/raw/gungeon_item_synergies_external.parquet"
+    base_column: base_item_name
+
+

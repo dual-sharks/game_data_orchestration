@@ -18,6 +18,8 @@ games:
           name_class: "item-title"     # <p class="item-title">Name</p>
           flavor_class: "pickup"       # <p class="pickup">Flavor text</p>
           notes_prefix: "Notes:"       # <p>Notes: ...</p>
+          synergy_title_class: "synergy-title"
+          synergy_item_class: "synergy-item"
 
           # Filter out non-gun entries by Type field
           exclude_type_contains:
@@ -82,6 +84,8 @@ games:
           name_class: "item-title"
           flavor_class: "pickup"
           notes_prefix: "Notes:"  # keep 'Notes:' lines as notes; 'Effect' is a field
+          synergy_title_class: "synergy-title"
+          synergy_item_class: "synergy-item"
 
           # Only keep entries whose Type looks like an item (Passive/Active).
           include_type_contains:

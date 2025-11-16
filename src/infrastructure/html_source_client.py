@@ -29,6 +29,13 @@ class HtmlCatalogItem:
     #   "DPS :16.4", "Damage :6", "Effect :Grants a heart container."
     fields: Dict[str, str]
 
+    # Optional synergies parsed from dedicated sections (e.g. Tiered Items cards).
+    # Each synergy dict is expected to contain:
+    #   - title: str
+    #   - description: str | None
+    #   - items: List[str] (names of participating guns/items)
+    synergies: List[Dict[str, Any]]
+
 
 @dataclass
 class HtmlSourceConfig:
@@ -46,6 +53,8 @@ class HtmlSourceConfig:
     notes_prefix: str
     exclude_type_contains: List[str]
     include_type_contains: List[str]
+    synergy_title_class: str | None = None
+    synergy_item_class: str | None = None
 
 
 @dataclass
@@ -92,6 +101,8 @@ class HtmlSourceClient:
             notes_prefix=str(entity_cfg.get("notes_prefix", "Notes:")),
             exclude_type_contains=list(entity_cfg.get("exclude_type_contains", [])),
             include_type_contains=list(entity_cfg.get("include_type_contains", [])),
+            synergy_title_class=str(entity_cfg.get("synergy_title_class", "")) or None,
+            synergy_item_class=str(entity_cfg.get("synergy_item_class", "")) or None,
         )
 
     def fetch_raw_html(self) -> str:
@@ -183,12 +194,53 @@ class HtmlSourceClient:
                 if not any(token.lower() in type_lower for token in cfg.include_type_contains):
                     return None
 
+        synergies: List[Dict[str, Any]] = []
+
+        # Optionally parse synergies if configured (e.g. Tiered Items cards).
+        if cfg.synergy_title_class:
+            for title_div in span.find_all("div", class_=cfg.synergy_title_class):
+                title = title_div.get_text(strip=True)
+
+                # Description is typically the next <p> sibling after the title div.
+                description: str | None = None
+                sib = title_div.find_next_sibling()
+                while sib is not None and sib.name != "p":
+                    sib = sib.find_next_sibling()
+                if sib is not None and sib.name == "p":
+                    description = sib.get_text(strip=True)
+
+                # Collect synergy participants until the next synergy title or end.
+                items: List[str] = []
+                current = sib.find_next_sibling() if sib is not None else title_div.find_next_sibling()
+                while current is not None:
+                    classes = current.get("class") or []
+                    if cfg.synergy_title_class in classes:
+                        # Start of the next synergy block.
+                        break
+                    if cfg.synergy_item_class and cfg.synergy_item_class in classes:
+                        p_tag = current.find("p")
+                        if p_tag is not None:
+                            name_text = p_tag.get_text(strip=True)
+                            if name_text:
+                                items.append(name_text)
+                    current = current.find_next_sibling()
+
+                if items or description:
+                    synergies.append(
+                        {
+                            "title": title,
+                            "description": description,
+                            "items": items,
+                        }
+                    )
+
         return HtmlCatalogItem(
             name=name,
             flavor_text=flavor_text,
             type=stats_raw.get("Type"),
             notes=notes,
             fields=stats_raw,
+            synergies=synergies,
         )
 
 

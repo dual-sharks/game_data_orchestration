@@ -291,3 +291,57 @@ class GungeonItemExternalSchema(BaseModel):
     );
     """
 
+
+class GungeonGunSynergyExternalSchema(BaseModel):
+    """
+    Logical schema for the curated `gungeon_gun_synergies_external` table.
+    """
+
+    game_id: str
+    game_name: str
+    base_gun_name: str
+    synergy_title: Optional[str] = None
+    synergy_description: Optional[str] = None
+    related_item_name: Optional[str] = None
+    source: Optional[str] = None
+
+    CREATE_TABLE_SQL: ClassVar[str] = """
+    CREATE TABLE IF NOT EXISTS gungeon_gun_synergies_external (
+        id BIGSERIAL PRIMARY KEY,
+        game_id TEXT NOT NULL,
+        game_name TEXT NOT NULL,
+        base_gun_name TEXT NOT NULL,
+        synergy_title TEXT,
+        synergy_description TEXT,
+        related_item_name TEXT,
+        source TEXT
+    );
+    """
+
+
+class GungeonItemSynergyExternalSchema(BaseModel):
+    """
+    Logical schema for the curated `gungeon_item_synergies_external` table.
+    """
+
+    game_id: str
+    game_name: str
+    base_item_name: str
+    synergy_title: Optional[str] = None
+    synergy_description: Optional[str] = None
+    related_item_name: Optional[str] = None
+    source: Optional[str] = None
+
+    CREATE_TABLE_SQL: ClassVar[str] = """
+    CREATE TABLE IF NOT EXISTS gungeon_item_synergies_external (
+        id BIGSERIAL PRIMARY KEY,
+        game_id TEXT NOT NULL,
+        game_name TEXT NOT NULL,
+        base_item_name TEXT NOT NULL,
+        synergy_title TEXT,
+        synergy_description TEXT,
+        related_item_name TEXT,
+        source TEXT
+    );
+    """
+
