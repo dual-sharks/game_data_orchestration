@@ -7,6 +7,7 @@ games:
     external_sources:
       tiereditems:
         base_url: "https://tiereditems.com"
+
         guns:
           # Relative path for the Gungeon cheat sheet
           path: "/etg"
@@ -37,27 +38,69 @@ games:
             type:
               field: "type"
             dps:
-              field: "dps"
+              source_field: "DPS"
+              cast: "float"
             damage:
-              field: "damage"
+              source_field: "Damage"
+              cast: "float"
             fire_rate:
-              field: "fire_rate"
+              source_field: "Fire Rate"
+              cast: "float"
             reload_time:
-              field: "reload_time"
+              source_field: "Reload Time"
+              cast: "float"
             magazine_size:
-              field: "magazine_size"
+              source_field: "Magazine Size"
+              cast: "int"
             ammo_capacity:
-              field: "ammo_capacity"
+              source_field: "Ammo Capacity"
+              cast: "int"
             shot_speed:
-              field: "shot_speed"
+              source_field: "Shot Speed"
+              cast: "float"
             range:
-              field: "range"
+              source_field: "Range"
+              cast: "float"
             force:
-              field: "force"
+              source_field: "Force"
+              cast: "float"
             spread:
-              field: "spread"
+              source_field: "Spread"
+              cast: "float"
             notes:
               field: "notes"
+            source:
+              value: "tiereditems"
+
+        items:
+          # Same page, different record mapping; we identify items by Type.
+          path: "/etg"
+
+          # HTML structure selectors (reuse card layout)
+          item_selector: "a"
+          image_class: "etg-item"
+          name_class: "item-title"
+          flavor_class: "pickup"
+          notes_prefix: "Notes:"  # keep 'Notes:' lines as notes; 'Effect' is a field
+
+          # Only keep entries whose Type looks like an item (Passive/Active).
+          include_type_contains:
+            - "Passive"
+            - "Active"
+
+          record:
+            game_id:
+              value: "gungeon"
+            game_name:
+              value: "Enter the Gungeon"
+            item_name:
+              field: "name"
+            pickup:
+              field: "flavor_text"
+            type:
+              field: "type"
+            effect:
+              source_field: "Effect"
             source:
               value: "tiereditems"
 

@@ -17,7 +17,7 @@ import sys
 if str(src_root) not in sys.path:
     sys.path.append(str(src_root))
 
-from domain.schemas import GungeonGunExternalSchema
+from domain.schemas import GungeonGunExternalSchema, GungeonItemExternalSchema
 
 
 DEFAULT_DB_URL = "postgresql+psycopg://postgres:postgres@localhost:5432/game_data"
@@ -42,12 +42,18 @@ class LoadPlan:
     truncate_before_load: bool = True
 
 
-# For now we only have a single plan: external Gungeon gun stats.
+# Load plans for external Gungeon guns and items.
 LOAD_PLANS: List[LoadPlan] = [
     LoadPlan(
         parquet_path=Path("data/raw/gungeon_guns_external.parquet"),
         table_name="gungeon_guns_external",
         schema=GungeonGunExternalSchema,
+        truncate_before_load=True,
+    ),
+    LoadPlan(
+        parquet_path=Path("data/raw/gungeon_items_external.parquet"),
+        table_name="gungeon_items_external",
+        schema=GungeonItemExternalSchema,
         truncate_before_load=True,
     ),
 ]

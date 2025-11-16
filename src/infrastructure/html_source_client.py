@@ -14,24 +14,20 @@ class HtmlCatalogItem:
     """
     Generic representation of a scraped catalog entry from an HTML page.
 
-    For now this is shaped around the tiereditems.com gun cards, but it
-    is generic enough to reuse for other games that expose similar stats.
+    The client is responsible only for extracting text; interpretation
+    into domain-specific fields happens in the application layer using
+    the `fields` mapping.
     """
 
+    # High-level attributes common to most catalog entries.
     name: str
     flavor_text: str | None
     type: str | None
-    dps: float | None
-    damage: float | None
-    fire_rate: float | None
-    reload_time: float | None
-    magazine_size: int | None
-    ammo_capacity: int | None
-    shot_speed: float | None
-    range: float | None
-    force: float | None
-    spread: float | None
     notes: str | None
+
+    # Raw key/value fields parsed from "Key :Value" lines, e.g.:
+    #   "DPS :16.4", "Damage :6", "Effect :Grants a heart container."
+    fields: Dict[str, str]
 
 
 @dataclass
@@ -49,6 +45,7 @@ class HtmlSourceConfig:
     flavor_class: str
     notes_prefix: str
     exclude_type_contains: List[str]
+    include_type_contains: List[str]
 
 
 @dataclass
@@ -94,6 +91,7 @@ class HtmlSourceClient:
             flavor_class=str(entity_cfg.get("flavor_class", "")),
             notes_prefix=str(entity_cfg.get("notes_prefix", "Notes:")),
             exclude_type_contains=list(entity_cfg.get("exclude_type_contains", [])),
+            include_type_contains=list(entity_cfg.get("include_type_contains", [])),
         )
 
     def fetch_raw_html(self) -> str:
@@ -173,48 +171,24 @@ class HtmlSourceClient:
         if not name:
             return None
 
-        # Only keep things that look like guns (Type not Passive/Active), per config.
+        # Apply optional Type-based filters from config.
         type_val = stats_raw.get("Type")
         if type_val:
             type_lower = type_val.lower()
-            for token in cfg.exclude_type_contains:
-                if token.lower() in type_lower:
+            if cfg.exclude_type_contains:
+                for token in cfg.exclude_type_contains:
+                    if token.lower() in type_lower:
+                        return None
+            if cfg.include_type_contains:
+                if not any(token.lower() in type_lower for token in cfg.include_type_contains):
                     return None
-
-        def _to_float(key: str) -> float | None:
-            v = stats_raw.get(key)
-            if not v:
-                return None
-            # Strip non-numeric suffixes like '%' or 'm'.
-            try:
-                return float(v.replace("%", "").replace("m", ""))
-            except ValueError:
-                return None
-
-        def _to_int(key: str) -> int | None:
-            v = stats_raw.get(key)
-            if not v:
-                return None
-            try:
-                return int(v)
-            except ValueError:
-                return None
 
         return HtmlCatalogItem(
             name=name,
             flavor_text=flavor_text,
             type=stats_raw.get("Type"),
-            dps=_to_float("DPS"),
-            damage=_to_float("Damage"),
-            fire_rate=_to_float("Fire Rate"),
-            reload_time=_to_float("Reload Time"),
-            magazine_size=_to_int("Magazine Size"),
-            ammo_capacity=_to_int("Ammo Capacity"),
-            shot_speed=_to_float("Shot Speed"),
-            range=_to_float("Range"),
-            force=_to_float("Force"),
-            spread=_to_float("Spread"),
             notes=notes,
+            fields=stats_raw,
         )
 
 

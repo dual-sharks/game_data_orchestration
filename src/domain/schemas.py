@@ -261,3 +261,33 @@ class GungeonGunExternalSchema(BaseModel):
     );
     """
 
+
+class GungeonItemExternalSchema(BaseModel):
+    """
+    Logical schema for the curated `gungeon_items_external` table.
+
+    This represents an external catalog of Gungeon items (e.g. scraped
+    from community sites), independent of the original game files.
+    """
+
+    game_id: str
+    game_name: str
+    item_name: Optional[str] = None
+    pickup: Optional[str] = None
+    type: Optional[str] = None
+    effect: Optional[str] = None
+    source: Optional[str] = None
+
+    CREATE_TABLE_SQL: ClassVar[str] = """
+    CREATE TABLE IF NOT EXISTS gungeon_items_external (
+        id BIGSERIAL PRIMARY KEY,
+        game_id TEXT NOT NULL,
+        game_name TEXT NOT NULL,
+        item_name TEXT,
+        pickup TEXT,
+        type TEXT,
+        effect TEXT,
+        source TEXT
+    );
+    """
+
