@@ -1,6 +1,9 @@
 # Prerequisites
 *.d
-
+*.ipynb
+*.txt
+*.parquet
+*.pyc
 # Compiled Object files
 *.slo
 *.lo

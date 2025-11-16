@@ -1,0 +1,35 @@
+games:
+  gungeon:
+    id: "gungeon"
+    name: "Enter the Gungeon"
+    sources:
+      items:
+        fetch:
+          type: "http"
+          url: "https://enterthegungeon.fandom.com/wiki/Module:Items/Data?action=raw"
+        format: "lua_table"
+
+      guns:
+        fetch:
+          type: "http"
+          url: "https://enterthegungeon.fandom.com/wiki/Module:Guns/Data?action=raw"
+        format: "lua_table"
+
+  riskofrain2:
+    id: "riskofrain2"
+    name: "Risk of Rain 2"
+
+    sources:
+      items:
+        fetch:
+          type: "http"
+          url: "https://riskofrain2.fandom.com/wiki/Module:Items/Data?action=raw"
+        format: "lua_table"
+
+      equipment:
+        fetch:
+          type: "http"
+          url: "https://riskofrain2.fandom.com/wiki/Module:Equipment/Data?action=raw"
+        format: "lua_table"
+
+# Game ingestion config
