@@ -7,6 +7,13 @@ from typing import List
 import pandas as pd
 from sqlalchemy import create_engine, text
 
+from application.gungeon_curation import GungeonCurationService
+from domain.schemas import (
+    RawGameEntitySchema,
+    GungeonGunSchema,
+    GungeonGunStatSchema,
+)
+
 
 DEFAULT_DB_URL = "postgresql+psycopg://postgres:postgres@localhost:5432/game_data"
 
@@ -35,11 +42,11 @@ def _load_parquet_files(raw_dir: Path) -> pd.DataFrame:
 
 def load_raw_parquet_to_postgres(raw_dir: str | Path = "data/raw") -> None:
     """
-    Load all raw Parquet snapshots into a Postgres table.
+    Load all raw Parquet snapshots into Postgres.
 
     - Reads all *.parquet files under `raw_dir`.
-    - Ensures a `raw_game_entities` table exists.
-    - Appends all rows into that table.
+    - Ensures a `raw_game_entities` table exists and appends all rows.
+    - Delegates to application-level curation to build Gungeon-specific tables.
     """
     raw_dir_path = Path(raw_dir)
     df = _load_parquet_files(raw_dir_path)
@@ -47,22 +54,18 @@ def load_raw_parquet_to_postgres(raw_dir: str | Path = "data/raw") -> None:
     db_url = _get_database_url()
     engine = create_engine(db_url)
 
-    # Ensure table exists with a simple, explicit schema.
-    create_table_sql = """
-    CREATE TABLE IF NOT EXISTS raw_game_entities (
-        id BIGSERIAL PRIMARY KEY,
-        game_id TEXT NOT NULL,
-        game_name TEXT NOT NULL,
-        entity_type TEXT NOT NULL,
-        external_key TEXT NOT NULL,
-        name TEXT,
-        quality TEXT,
-        raw TEXT NOT NULL
-    );
-    """
+    # Ensure raw table exists with a simple, explicit schema.
+    create_raw_sql = RawGameEntitySchema.CREATE_TABLE_SQL
+
+    # Ensure curated tables exist for Gungeon guns and their stats.
+    create_guns_sql = GungeonGunSchema.CREATE_TABLE_SQL
+
+    create_gun_stats_sql = GungeonGunStatSchema.CREATE_TABLE_SQL
 
     with engine.begin() as conn:
-        conn.execute(text(create_table_sql))
+        conn.execute(text(create_raw_sql))
+        conn.execute(text(create_guns_sql))
+        conn.execute(text(create_gun_stats_sql))
 
     # Only keep the columns we know about, in a stable order.
     cols = ["game_id", "game_name", "entity_type", "external_key", "name", "quality", "raw"]
@@ -72,8 +75,19 @@ def load_raw_parquet_to_postgres(raw_dir: str | Path = "data/raw") -> None:
 
     df = df[cols]
 
-    # Append into the table.
+    # Append into the raw table.
     df.to_sql("raw_game_entities", engine, if_exists="append", index=False, method="multi")
+
+    # Application-level curation for Gungeon.
+    service = GungeonCurationService()
+
+    curated_guns = service.curate_guns(df)
+    if not curated_guns.empty:
+        curated_guns.to_sql("gungeon_guns", engine, if_exists="append", index=False, method="multi")
+
+    curated_stats = service.curate_gun_stats(df)
+    if not curated_stats.empty:
+        curated_stats.to_sql("gungeon_gun_stats", engine, if_exists="append", index=False, method="multi")
 
 
 def main() -> None:
@@ -82,5 +96,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
-
